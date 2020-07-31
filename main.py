@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from dataset import CUHK_PEDES
 from utils.config import Config
 from utils.preprocess import *
-
+from model import GNA_RNN
 
 class Model(object):
     """the class of model
@@ -40,7 +40,7 @@ class Model(object):
             self.test_loader = DataLoader(self.test_set, batch_size=1)
 
             # init network
-            self.Net = None
+            self.net = GNA_RNN()
             self.criterion = nn.BCELoss()
             self.optimizer = None
             self.lr_scheduler = None
@@ -101,16 +101,21 @@ class Model(object):
     def train(self):
         for e in range(self.conf.epochs):
             for b, (images, captions, labels) in enumerate(self.train_loader):
+                self.net.train()
                 print(images, captions, labels)
                 if b >= 10:
                     break
             break
 
     def test(self):
-        pass
+        self.net.eval()
+        for b, (images, captions, labels) in enumerate(self.test_loader):
+            pass
 
     def eval(self):
-        pass
+        self.net.eval()
+        for b, (images, captions, labels) in enumerate(self.valid_loader):
+            pass
 
     def web(self):
         pass
