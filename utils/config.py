@@ -3,14 +3,18 @@ from loguru import logger
 
 class Config(object):
     def __init__(self):
-        self.action = 'process'  # train or test
+        self.action = 'train'  # train or test
         logger.add('logs/{time: YYYY-MM-DD_HH-mm-ss}.log')
         self.logger = logger
         self.gpu_id = 0
+        self.num_workers = 5
         self.vocab_dir = 'vocab'
         self.data_dir = 'data'
         self.raw_data = 'reid_raw.json'
         self.word_count_threshold = 2
+        self.max_length = 50
+        self.epochs = 50
+        self.images_dir = 'data/CUHK-PEDES/imgs'
         # path to the h5file containing the preprocessed dataset
         self.input_h5 = 'data/reidtalk.h5'
         # path to the json file containing additional info and vocab
@@ -75,4 +79,8 @@ class Config(object):
         self.backend = 'cudnn'
         # an id identifying this run/job. used in cross-val and appended when writing progress files
         self.id = ''
-        self.logger.info(self.__dict__)
+        import json
+        d = self.__dict__.copy()
+        d.pop('logger')
+        j = json.dumps(d, indent=2)
+        self.logger.info('\n' + j)

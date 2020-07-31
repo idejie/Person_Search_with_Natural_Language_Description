@@ -1,11 +1,12 @@
 import torch
+import torch.nn as nn
 from torch.backends import cudnn
 from torch.utils.data import DataLoader
 
-from utils.config import Config
 from dataset import CUHK_PEDES
+from utils.config import Config
 from utils.preprocess import *
-import torch.nn as nn
+
 
 class Model(object):
     """the class of model
@@ -25,10 +26,11 @@ class Model(object):
         self.data_dir = conf.data_dir
         self.raw_data = conf.raw_data
         self.word_count_threshold = conf.word_count_threshold
-
+        self.conf = conf
         # load data
         if conf.action != 'process':
-            train_set, valid_set, test_set = self.load_data()
+            train_set, valid_set, test_set, vocab = self.load_data()
+            conf.vocab_size = vocab['UNK']
             self.train_set = CUHK_PEDES(conf, train_set)
             self.valid_set = CUHK_PEDES(conf, valid_set)
             self.test_set = CUHK_PEDES(conf, test_set)
@@ -53,7 +55,10 @@ class Model(object):
         test_set_path = os.path.join(self.data_dir, 'test_set.json')
         with open(test_set_path, 'r', encoding='utf8') as f:
             test_set = json.load(f)
-        return train_set, valid_set, test_set
+        w2i_path = os.path.join(self.vocab_dir, 'w2i.json')
+        with open(w2i_path, 'r', encoding='utf8') as f:
+            vocab = json.load(f)
+        return train_set, valid_set, test_set, vocab
 
     def process(self):
         # load images list
@@ -94,7 +99,12 @@ class Model(object):
             json.dump(test_set, f)
 
     def train(self):
-        pass
+        for e in range(self.conf.epochs):
+            for b, (images, captions, labels) in enumerate(self.train_loader):
+                print(images, captions, labels)
+                if b >= 10:
+                    break
+            break
 
     def test(self):
         pass

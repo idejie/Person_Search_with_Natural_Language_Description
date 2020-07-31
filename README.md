@@ -14,12 +14,18 @@ python main.py
 ```
 - the script will produce the  vocabulary map in directory `vocab` and split dataset  in directory `data`
 
+## Train
+
+## Test
+
+## Visualization
+
 ## TODO:
 - [x] Preprocess
     - [x] create the vocabulary of the dataset
     - [x] encode the captions
-- [ ] DataLoader
-    - [ ] CUDK-PEDES dataset
+- [x] DataLoader
+    - [x] CUDK-PEDES dataset
 - [ ]  Model: GNA-RNN
     - [ ] Visual units
     - [ ] Attention over visual units
