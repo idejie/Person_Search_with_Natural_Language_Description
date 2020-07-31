@@ -30,8 +30,8 @@
     - [x] CUDK-PEDES dataset
 - [ ]  Model: GNA-RNN
     - [x] Visual units
-    - [ ] Attention over visual units
-    - [ ] Word-level gates for visual units
+    - [x] Attention over visual units
+    - [x] Word-level gates for visual units
     - [ ] train
     - [ ] valid
     - [ ] test

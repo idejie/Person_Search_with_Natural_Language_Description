@@ -4,9 +4,10 @@ from torch.backends import cudnn
 from torch.utils.data import DataLoader
 
 from dataset import CUHK_PEDES
+from model import GNA_RNN
 from utils.config import Config
 from utils.preprocess import *
-from model import GNA_RNN
+
 
 class Model(object):
     """the class of model
@@ -40,7 +41,7 @@ class Model(object):
             self.test_loader = DataLoader(self.test_set, batch_size=1)
 
             # init network
-            self.net = GNA_RNN()
+            self.net = GNA_RNN(conf)
             self.criterion = nn.BCELoss()
             self.optimizer = None
             self.lr_scheduler = None
@@ -110,7 +111,13 @@ class Model(object):
     def test(self):
         self.net.eval()
         for b, (images, captions, labels) in enumerate(self.test_loader):
-            pass
+            if self.conf.gpu_id != -1:
+                self.net.cuda()
+                images = images.cuda()
+                captions = captions.cuda()
+                labels = labels.cuda()
+            out = self.net(images, captions)
+            loss = self.criterion(out, labels)
 
     def eval(self):
         self.net.eval()
