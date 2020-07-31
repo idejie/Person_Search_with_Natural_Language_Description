@@ -2,7 +2,7 @@
 
 **Torch Version: [[ShuangLI59/Person-Search-with-Natural-Language-Description]](https://github.com/ShuangLI59/Person-Search-with-Natural-Language-Description)**
 
-## Dataset
+## 0.Dataset
 
 **Details see [[ShuangLI59/Person-Search-with-Natural-Language-Description]](https://github.com/ShuangLI59/Person-Search-with-Natural-Language-Description)**
 
@@ -14,11 +14,11 @@ python main.py
 ```
 - the script will produce the  vocabulary map in directory `vocab` and split dataset  in directory `data`
 
-## Train
+## 1.Train
 
-## Test
+## 2.Test
 
-## Visualization
+## 3.Visualization
 
 ## TODO:
 - [x] Preprocess
@@ -34,4 +34,7 @@ python main.py
     - [ ] valid
     - [ ] test
 - [ ] Web Visualization
+
+## References
+- [[ShuangLI59/Person-Search-with-Natural-Language-Description]](https://github.com/ShuangLI59/Person-Search-with-Natural-Language-Description)
 
