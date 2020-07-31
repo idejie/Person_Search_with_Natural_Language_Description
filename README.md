@@ -2,17 +2,17 @@
 
 **Torch Version: [[ShuangLI59/Person-Search-with-Natural-Language-Description]](https://github.com/ShuangLI59/Person-Search-with-Natural-Language-Description)**
 
-## 0.Dataset
-
+## 0.DataSet
+ - Download
 **Details see [[ShuangLI59/Person-Search-with-Natural-Language-Description]](https://github.com/ShuangLI59/Person-Search-with-Natural-Language-Description)**
 
-### Preprocess
-- you can update the parameters for the preprocess in [utils/config.py](./utils/config.py), like `word_count_threshold` and set `action`value "process"
-- then run:
-```shell
-python main.py
-```
-- the script will produce the  vocabulary map in directory `vocab` and split dataset  in directory `data`
+- Preprocess
+    - you can update the parameters for the preprocess in [utils/config.py](./utils/config.py), like `word_count_threshold` and set `action`value "process"
+    - then run:
+        ```shell
+        python main.py
+        ```
+    - the script will produce the  vocabulary map in directory `vocab` and split dataset  in directory `data`
 
 ## 1.Train
 
