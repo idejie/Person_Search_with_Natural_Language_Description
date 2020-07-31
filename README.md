@@ -6,7 +6,7 @@
 
 ## 0.DataSet
  - Download:
-**Details see [[ShuangLI59/Person-Search-with-Natural-Language-Description]](https://github.com/ShuangLI59/Person-Search-with-Natural-Language-Description)**
+**Details in [[ShuangLI59/Person-Search-with-Natural-Language-Description]](https://github.com/ShuangLI59/Person-Search-with-Natural-Language-Description)**
 
 - Preprocess
     - you can update the parameters for the preprocess in [utils/config.py](./utils/config.py), like `word_count_threshold` and set `action`value "process"
@@ -22,7 +22,7 @@
 
 ## 3.Visualization
 
-## TODO:
+## 4.TODO:
 - [x] Preprocess
     - [x] create the vocabulary of the dataset
     - [x] encode the captions
