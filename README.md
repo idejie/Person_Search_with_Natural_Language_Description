@@ -7,7 +7,7 @@
 **Details see [[ShuangLI59/Person-Search-with-Natural-Language-Description]](https://github.com/ShuangLI59/Person-Search-with-Natural-Language-Description)**
 
 ### Preprocess
-- you can update the parameters for the preprocess in [utils/config.py](./utils/config.py), like `word_count_threshold` and `action`(set value "process")
+- you can update the parameters for the preprocess in [utils/config.py](./utils/config.py), like `word_count_threshold` and set `action`value "process"
 - then run:
 ```shell
 python main.py
