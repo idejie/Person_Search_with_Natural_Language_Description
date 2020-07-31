@@ -27,20 +27,21 @@ class Model(object):
         self.word_count_threshold = conf.word_count_threshold
 
         # load data
-        train_set, valid_set, test_set = self.load_data()
-        self.train_set = CUHK_PEDES(conf, train_set)
-        self.valid_set = CUHK_PEDES(conf, valid_set)
-        self.test_set = CUHK_PEDES(conf, test_set)
-        self.train_loader = DataLoader(self.train_set, batch_size=conf.batch_size, num_workers=conf.num_workers,
-                                       shuffle=True)
-        self.valid_loader = DataLoader(self.valid_set, batch_size=conf.batch_size, num_workers=conf.num_workers)
-        self.test_loader = DataLoader(self.test_set, batch_size=1)
+        if conf.action != 'process':
+            train_set, valid_set, test_set = self.load_data()
+            self.train_set = CUHK_PEDES(conf, train_set)
+            self.valid_set = CUHK_PEDES(conf, valid_set)
+            self.test_set = CUHK_PEDES(conf, test_set)
+            self.train_loader = DataLoader(self.train_set, batch_size=conf.batch_size, num_workers=conf.num_workers,
+                                           shuffle=True)
+            self.valid_loader = DataLoader(self.valid_set, batch_size=conf.batch_size, num_workers=conf.num_workers)
+            self.test_loader = DataLoader(self.test_set, batch_size=1)
 
-        # init network
-        self.Net = None
-        self.criterion = nn.BCELoss()
-        self.optimizer = None
-        self.lr_scheduler = None
+            # init network
+            self.Net = None
+            self.criterion = nn.BCELoss()
+            self.optimizer = None
+            self.lr_scheduler = None
 
     def load_data(self):
         train_set_path = os.path.join(self.data_dir, 'train_set.json')
@@ -50,7 +51,7 @@ class Model(object):
         with open(valid_set_path, 'r', encoding='utf8') as f:
             valid_set = json.load(f)
         test_set_path = os.path.join(self.data_dir, 'test_set.json')
-        with open(test_set_path, 'w', encoding='utf8') as f:
+        with open(test_set_path, 'r', encoding='utf8') as f:
             test_set = json.load(f)
         return train_set, valid_set, test_set
 

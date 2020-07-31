@@ -3,10 +3,14 @@ from loguru import logger
 
 class Config(object):
     def __init__(self):
-        self.action = 'train'  # train or test
+        self.action = 'process'  # train or test
         logger.add('logs/{time: YYYY-MM-DD_HH-mm-ss}.log')
         self.logger = logger
         self.gpu_id = 0
+        self.vocab_dir = 'vocab'
+        self.data_dir = 'data'
+        self.raw_data = 'reid_raw.json'
+        self.word_count_threshold = 2
         # path to the h5file containing the preprocessed dataset
         self.input_h5 = 'data/reidtalk.h5'
         # path to the json file containing additional info and vocab

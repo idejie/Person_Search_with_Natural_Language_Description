@@ -16,7 +16,7 @@ class CUHK_PEDES(Dataset):
             dataset:
         """
         self.dataset = dataset
-        pass
+        self.config = conf
 
     def __getitem__(self, index):
         """ get an item of dataset by index
@@ -28,7 +28,8 @@ class CUHK_PEDES(Dataset):
             item: an item of dataset
         """
         #  resize image to 256x256
-        pass
+        print(self.dataset[index])
+        return None
 
     def __len__(self):
         """get the length of the dataset
