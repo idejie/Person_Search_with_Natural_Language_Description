@@ -8,6 +8,7 @@
 
 ### Preprocess
 - you can update the parameters for the preprocess in [utils/config.py](./utils/config.py), like `word_count_threshold`
+- then run:
 ```shell
 python main.py
 ```
