@@ -26,13 +26,14 @@
 - [x] Preprocess
     - [x] create the vocabulary of the dataset
     - [x] encode the captions
-- [x] DataLoader
+- [] DataLoader
     - [x] CUDK-PEDES dataset
+    - [ ] sample negative
 - [ ]  Model: GNA-RNN
     - [x] Visual units
     - [x] Attention over visual units
     - [x] Word-level gates for visual units
-    - [ ] train
+    - [x] train
     - [ ] valid
     - [ ] test
 - [ ] Web Visualization

@@ -51,12 +51,12 @@ class CUHK_PEDES(Dataset):
         # transform captions to (1,max_length) one-hot vector
         cap_index = data['index_captions'][cap_index]
 
-        caption = torch.zeros((self.config.max_length, self.config.vocab_size)).long()
+        caption = torch.zeros((self.config.max_length, self.config.vocab_size))
         for i, cap_i in enumerate(cap_index):
             if i < self.config.max_length:
-                caption[i][cap_i - 1] = 1
+                caption[i][cap_i] = 1
 
-        label = data['id']
+        label = 1
 
         return image, caption, label
 

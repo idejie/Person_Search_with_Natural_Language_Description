@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.backends import cudnn
+from torch.optim import Adam
 from torch.utils.data import DataLoader
 
 from dataset import CUHK_PEDES
@@ -31,7 +32,7 @@ class Model(object):
         # load data
         if conf.action != 'process':
             train_set, valid_set, test_set, vocab = self.load_data()
-            conf.vocab_size = vocab['UNK']
+            conf.vocab_size = vocab['UNK'] + 1
             self.train_set = CUHK_PEDES(conf, train_set)
             self.valid_set = CUHK_PEDES(conf, valid_set)
             self.test_set = CUHK_PEDES(conf, test_set)
@@ -43,7 +44,7 @@ class Model(object):
             # init network
             self.net = GNA_RNN(conf)
             self.criterion = nn.BCELoss()
-            self.optimizer = None
+            self.optimizer = Adam(params=self.net.parameters())
             self.lr_scheduler = None
 
     def load_data(self):
@@ -103,10 +104,20 @@ class Model(object):
         for e in range(self.conf.epochs):
             for b, (images, captions, labels) in enumerate(self.train_loader):
                 self.net.train()
-                print(images, captions, labels)
-                if b >= 10:
-                    break
-            break
+                self.optimizer.zero_grad()
+                labels = labels.unsqueeze(-1).float()
+                if self.conf.gpu_id != -1:
+                    self.net.cuda()
+                    images = images.cuda()
+                    captions = captions.cuda()
+                    labels = labels.cuda()
+                out = self.net(images, captions)
+                # print(out.shape, labels.shape)
+                loss = self.criterion(out, labels)
+                self.logger.info(
+                    f'Epoch {e}/{self.conf.epochs} Batch {b}/{len(self.train_loader)}, Loss:{loss.item():.4f}')
+                loss.backward()
+                self.optimizer.step()
 
     def test(self):
         self.net.eval()
@@ -117,6 +128,7 @@ class Model(object):
                 captions = captions.cuda()
                 labels = labels.cuda()
             out = self.net(images, captions)
+            print(out)
             loss = self.criterion(out, labels)
 
     def eval(self):

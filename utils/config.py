@@ -6,7 +6,7 @@ class Config(object):
         self.action = 'train'  # train or test
         logger.add('logs/{time: YYYY-MM-DD_HH-mm-ss}.log')
         self.logger = logger
-        self.gpu_id = 0
+        self.gpu_id = 1
         self.num_workers = 5
         self.vocab_dir = 'vocab'
         self.data_dir = 'data'
@@ -14,6 +14,7 @@ class Config(object):
         self.word_count_threshold = 2
         self.max_length = 50
         self.epochs = 50
+        self.embedding_size = 512
         self.images_dir = 'data/CUHK-PEDES/imgs'
         # path to the h5file containing the preprocessed dataset
         self.input_h5 = 'data/reidtalk.h5'
@@ -27,15 +28,14 @@ class Config(object):
         self.start_from = ''
         self.neg_time = 3
         # the encoding size of each token in the vocabulary, and the image.
-        self.input_encoding_size = 512
-        # size of the rnn in number of hidden nodes in each layer
-        self.rnn_size = 512
+        self.rnn_hidden_size = 512
+        self.output_size = 512
         self.batch_size = 32
         # clip gradients at this value
         # (note should be lower than usual 5 because we normalize grads by both batch and seq_length)
         self.grad_clip = 5
         # strength of dropout in the Language Model RNN
-        self.drop_prob_lm = 0.5
+        self.rnn_dropout = 0.5
         # After what iteration do we start finetuning the CNN? (-1 = disable; never finetune, 0 = finetune from start)
         self.finetune_cnn_after = -1
         # number of captions to sample for each image during training.
@@ -56,7 +56,7 @@ class Config(object):
         # epsilon that goes into denominator for smoothing
         self.optim_epsilon = 1e-8
         # number of LSTM layers
-        self.num_layers = 1
+        self.rnn_layers = 1
         # optimization to use for CNN
         self.cnn_optim = 'adam'
         # learning rate for the CNN
