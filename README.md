@@ -17,7 +17,7 @@
     - the script will produce the  vocabulary map in directory `vocab` and split dataset  in directory `data`
 
 ## 1.Train
- - you can update the parameters for the preprocess in [utils/config.py](./utils/config.py), like `batch_size`, `epoch`, ...., and set `train`value "process"
+ - you can update the parameters for the preprocess in [utils/config.py](./utils/config.py), like `batch_size`, `epoch`, ...., and set `action` value "train"
 - then run:
         ```shell
         python main.py
