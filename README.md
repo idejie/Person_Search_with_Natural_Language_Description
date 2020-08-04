@@ -31,7 +31,7 @@
 - [x] Preprocess
     - [x] create the vocabulary of the dataset
     - [x] encode the captions
-- [ ] DataLoader
+- [x] DataLoader
     - [x] CUDK-PEDES dataset
     - [x] sample negative
 - [ ]  Model: GNA-RNN
