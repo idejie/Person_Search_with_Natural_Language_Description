@@ -12,6 +12,9 @@ class Config(object):
         self.data_dir = 'data'
         self.raw_data = 'reid_raw.json'
         self.word_count_threshold = 2
+        self.positive_samples = 1
+        self.negative_samples = 3
+        self.n_original_captions = 2
         self.max_length = 50
         self.epochs = 50
         self.embedding_size = 512

@@ -33,7 +33,7 @@
     - [x] encode the captions
 - [ ] DataLoader
     - [x] CUDK-PEDES dataset
-    - [ ] sample negative
+    - [x] sample negative
 - [ ]  Model: GNA-RNN
     - [x] Visual units
     - [x] Attention over visual units
