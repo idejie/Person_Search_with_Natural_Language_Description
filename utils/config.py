@@ -33,7 +33,7 @@ class Config(object):
         # the encoding size of each token in the vocabulary, and the image.
         self.rnn_hidden_size = 512
         self.output_size = 512
-        self.batch_size = 32
+        self.batch_size = 64
         # clip gradients at this value
         # (note should be lower than usual 5 because we normalize grads by both batch and seq_length)
         self.grad_clip = 5

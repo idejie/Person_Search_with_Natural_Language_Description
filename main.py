@@ -33,7 +33,7 @@ class Model(object):
         if conf.action != 'process':
             train_set, valid_set, test_set, vocab = self.load_data()
             conf.vocab_size = vocab['UNK'] + 1
-            self.train_set = CUHK_PEDES(conf, train_set)
+            self.train_set = CUHK_PEDES(conf, train_set, is_train=True)
             self.valid_set = CUHK_PEDES(conf, valid_set)
             self.test_set = CUHK_PEDES(conf, test_set)
             self.train_loader = DataLoader(self.train_set, batch_size=conf.batch_size, num_workers=conf.num_workers,
@@ -44,7 +44,7 @@ class Model(object):
             # init network
             self.net = GNA_RNN(conf)
             self.criterion = nn.BCELoss()
-            self.optimizer = Adam(params=self.net.parameters())
+            self.optimizer = Adam(params=self.net.parameters(), lr=1e-5)
             self.lr_scheduler = None
 
     def load_data(self):
@@ -112,12 +112,13 @@ class Model(object):
                     captions = captions.cuda()
                     labels = labels.cuda()
                 out = self.net(images, captions)
-                # print(out.shape, labels.shape)
                 loss = self.criterion(out, labels)
                 self.logger.info(
                     f'Epoch {e}/{self.conf.epochs} Batch {b}/{len(self.train_loader)}, Loss:{loss.item():.4f}')
                 loss.backward()
                 self.optimizer.step()
+            if self.lr_scheduler:
+                self.lr_scheduler.step()
 
     def test(self):
         self.net.eval()
