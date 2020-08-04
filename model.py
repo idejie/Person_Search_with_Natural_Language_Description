@@ -55,11 +55,18 @@ class Language_Subnet(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(conf.embedding_size, conf.embedding_size)  # vis-fc2
         )
-        self.rnn = nn.LSTM(input_size=conf.embedding_size * 2,
-                           hidden_size=conf.rnn_hidden_size,
-                           num_layers=conf.rnn_layers,
-                           dropout=conf.rnn_dropout
-                           )
+        if conf.rnn_layers == 1:
+            self.rnn = nn.LSTM(input_size=conf.embedding_size * 2,
+                               hidden_size=conf.rnn_hidden_size,
+                               num_layers=conf.rnn_layers
+                               )
+            self.dropout = nn.Dropout(conf.rnn_dropout)
+        else:
+            self.rnn = nn.LSTM(input_size=conf.embedding_size * 2,
+                               hidden_size=conf.rnn_hidden_size,
+                               num_layers=conf.rnn_layers,
+                               dropout=conf.rnn_dropout
+                               )
         self.conf = conf
         self.attention = Attention(conf)
         self.sigmoid = nn.Sigmoid()
@@ -83,6 +90,8 @@ class Language_Subnet(nn.Module):
             cell_state_0 = cell_state_0.cuda()
         rnn_out, (hidden_states, cell_states) = self.rnn(x_emb, (hidden_state_0, cell_state_0))
         # print('rnn_out', rnn_out.shape)
+        if self.conf.rnn_layers == 1:
+            rnn_out = self.dropout(rnn_out)
         attn_out = self.attention(image_feats, rnn_out)
         # print('attn_out', attn_out.shape)
         attn_out = torch.sum(attn_out, dim=1)

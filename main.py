@@ -122,13 +122,16 @@ class Model(object):
 
     def test(self):
         self.net.eval()
-        for b, (images, captions, labels) in enumerate(self.test_loader):
+        for b_cap, (correct_images, query_captions, _) in enumerate(self.test_loader):
             if self.conf.gpu_id != -1:
                 self.net.cuda()
-                images = images.cuda()
-                captions = captions.cuda()
-                labels = labels.cuda()
-            out = self.net(images, captions)
+                correct_images = correct_images.cuda()
+                query_captions = query_captions.cuda()
+            for b_img, (database_images,_,_) in enumerate(self.test_loader):
+                if self.conf.gpu_id !=-1:
+                    database_images = database_images.cuda()
+                out = self.net(database_images, query_captions)
+
             print(out)
             loss = self.criterion(out, labels)
 
