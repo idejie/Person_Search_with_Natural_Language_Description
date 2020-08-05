@@ -44,7 +44,7 @@
     - [x] metrics
     - [x] checkpoints
 - [ ] Accelerate
-    - [ ] AMP: automatic mixed precision
+    - [x] AMP: automatic mixed precision
     - [ ] Parallel
 - [ ] Web Visualization
     - [ ] API
