@@ -114,7 +114,13 @@ class GNA_RNN(nn.Module):
         self.cnn.classifier = self.cnn.classifier[:-1]
         self.language_subnet = Language_Subnet(conf)
 
-    def forward(self, images, captions):
-        image_feats = self.cnn(images)
-        out = self.language_subnet(image_feats, captions)
+    def forward(self, images, captions=None, query=False):
+        if not query:
+            image_feats = self.cnn(images)
+        else:
+            image_feats = images
+        if captions is not None:
+            out = self.language_subnet(image_feats, captions)
+        else:
+            out = image_feats
         return out

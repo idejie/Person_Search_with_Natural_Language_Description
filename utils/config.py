@@ -27,8 +27,8 @@ class Config(object):
         self.top_k = [1, 5, 10]
         self.image_size = (256, 256)
         self.eval_interval = 500
-        self.test_interval = 10
+        self.test_interval = 1
         self.rnn_layers = 1
         self.rnn_dropout = 0.5
         self.backend = 'cudnn'  # nn|cudnn
-        self.parallel = True
+        self.parallel = False

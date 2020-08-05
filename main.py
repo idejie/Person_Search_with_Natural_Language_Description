@@ -35,7 +35,7 @@ class Model(object):
         conf.logger.info(f'CUDA is available? {torch.cuda.is_available()}')
         if type(conf.gpu_id) == int and torch.cuda.is_available():
             device = f'Single-GPU:{conf.gpu_id}'
-            self.device = torch.device('cuda', device=conf.gpu_id)
+            self.device = torch.device(f'cuda:{conf.gpu_id}')
         elif type(conf.gpu_id) == list and len(conf.gpu_id) > 0 and torch.cuda.device_count() > 1:
             device = f'Multi-GPU:{conf.gpu_id}'
             local_rank = distributed.get_rank()
@@ -66,7 +66,7 @@ class Model(object):
             self.test_db_set = CUHK_PEDES(conf, test_set, query_or_db='db')
             if conf.parallel:
                 self.train_loader = DataLoader(self.train_set, batch_size=conf.batch_size, num_workers=conf.num_workers,
-                                               shuffle=True, sampler=DistributedSampler(self.train_set))
+                                               sampler=DistributedSampler(self.train_set))
                 self.valid_query_loader = DataLoader(self.valid_query_set, batch_size=conf.batch_size,
                                                      num_workers=conf.num_workers,
                                                      sampler=DistributedSampler(self.valid_query_set))
@@ -188,9 +188,9 @@ class Model(object):
                     self.eval()
             if self.lr_scheduler:
                 self.lr_scheduler.step()
+            self.save_checkpoint(e)
             if (e + 1) % self.conf.test_interval == 0:
                 self.test()
-            self.save_checkpoint(e)
 
     def test(self):
         # test stage
@@ -206,7 +206,11 @@ class Model(object):
             for d, (images, indexes_d) in enumerate(self.test_db_loader):
                 if self.conf.gpu_id != -1:
                     images = images.cuda()
-                images_feats_out = self.net.cnn(images)
+                if self.conf.amp:
+                    with autocast():
+                        images_feats_out = self.net(images)
+                else:
+                    images_feats_out = self.net(images)
                 # caption: for q in  query
                 for q, (captions, indexes_q) in enumerate(self.test_query_loader):
                     if self.conf.gpu_id != -1:
@@ -217,9 +221,9 @@ class Model(object):
                         # print(image_out_repeat.shape,index_d_repeat.shape)
                         if self.conf.amp:
                             with autocast():
-                                outs = self.net.language_subnet(image_out_repeat, captions)
+                                outs = self.net(image_out_repeat, captions, query=True)
                         else:
-                            outs = self.net.language_subnet(image_out_repeat, captions)
+                            outs = self.net(image_out_repeat, captions, query=True)
                         eval_bar.update(1)
                         out_matrix[indexes_q, index_d_repeat] = outs.squeeze(1).cpu().detach().numpy()
                         labels = (index_d_repeat == indexes_q) + 0
@@ -253,7 +257,11 @@ class Model(object):
             for d, (images, indexes_d) in enumerate(self.valid_db_loader):
                 if self.conf.gpu_id != -1:
                     images = images.cuda()
-                images_feats_out = self.net.cnn(images)
+                if self.conf.amp:
+                    with autocast():
+                        images_feats_out = self.net(images)
+                else:
+                    images_feats_out = self.net(images)
                 # caption: for q in  query
                 for q, (captions, indexes_q) in enumerate(self.valid_query_loader):
                     if self.conf.gpu_id != -1:
@@ -264,9 +272,9 @@ class Model(object):
                         index_d_repeat = index_d.repeat(len(captions), 1)
                         if self.conf.amp:
                             with autocast():
-                                outs = self.net.language_subnet(image_out_repeat, captions)
+                                outs = self.net(image_out_repeat, captions, query=True)
                         else:
-                            outs = self.net.language_subnet(image_out_repeat, captions)
+                            outs = self.net(image_out_repeat, captions, query=True)
                         eval_bar.update(1)
                         out_matrix[indexes_q, index_d_repeat] = outs.squeeze(1).cpu().detach().numpy()
                         labels = (index_d_repeat == indexes_q) + 0
@@ -312,8 +320,11 @@ class Model(object):
             os.mkdir(checkpoints_dir)
         file_path = os.path.join(checkpoints_dir, file_name)
         content = {
-            'model': self.net.state_dict(),
-            'epoch': e
+            'model': self.net.module.state_dict() if config.parallel else self.net.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
+            'epoch': e,
+            'parallel': self.conf.parallel
+
         }
         torch.save(content, file_path)
         self.logger.info(f'saved checkpoints: {file_name}')
@@ -323,7 +334,11 @@ class Model(object):
             raise FileNotFoundError('please set checkpoint directory and filename')
         file_path = os.path.join(checkpoints_dir, file_name)
         content = torch.load(file_path)
-        self.net.load_state_dict(content)
+        if content.get('parallel', True):
+            net = torch.nn.parallel.DistributedDataParallel(self.net)
+            net.load_state_dict(content['model'])
+        else:
+            self.net.load_state_dict(content['model'])
         self.logger.info(f'loaded checkpoints from `{file_path}`')
 
 

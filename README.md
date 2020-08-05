@@ -22,6 +22,12 @@
     ```shell
     python main.py
     ```
+- if you want to use **multi-gpu**:
+    ```shell
+    CUDA_VISIBLE_DEVICES=[YOUR_GPU_IDs] python -m torch.distributed.launch --nproc_per_node=[YOUR_GPU_COUNT] main.py
+    # exmaple:
+    CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node=2 main.py
+    ```
 
 ## 2.Test
 
@@ -48,7 +54,7 @@
     - [x] Parallel
 - [ ] Web Visualization
     - [ ] API
-    - [ ] Font
+    - [ ] Front End
 
 ## References
 - [[ShuangLI59/Person-Search-with-Natural-Language-Description]](https://github.com/ShuangLI59/Person-Search-with-Natural-Language-Description)

@@ -26,8 +26,6 @@ class CUHK_PEDES(Dataset):
         self.is_train = is_train
         self.query_or_db = query_or_db
         self.dataset = dataset
-        if not is_train:
-            self.dataset = self.dataset
         self.config = conf
         self.positive_samples = conf.positive_samples
         self.negative_samples = conf.negative_samples
