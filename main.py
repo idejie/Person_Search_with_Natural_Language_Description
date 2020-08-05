@@ -26,7 +26,9 @@ class Model(object):
         conf.logger.info(f'CUDA is available? {torch.cuda.is_available()}')
         if type(conf.gpu_id) == int and torch.cuda.is_available():
             self.device = torch.device('cuda:' + str(conf.gpu_id))
-            conf.logger.info(self.device)
+        else:
+            self.device = torch.device('cpu')
+        conf.logger.info(self.device)
         if conf.backend == 'cudnn' and torch.cuda.is_available():
             cudnn.benchmark = True
 
@@ -58,7 +60,7 @@ class Model(object):
 
             # init network
             self.net = GNA_RNN(conf)
-            self.criterion = nn.BCELoss()
+            self.criterion = nn.BCEWithLogitsLoss()
             self.optimizer = Adam(params=self.net.parameters(), lr=1e-5)
             self.lr_scheduler = None
 
@@ -135,7 +137,7 @@ class Model(object):
                         out = self.net(images, captions)
                         loss = self.criterion(out, labels)
                     scaler.scale(loss).backward()
-                    scaler.step()
+                    scaler.step(self.optimizer)
                     scaler.update()
                 else:
                     out = self.net(images, captions)
@@ -287,6 +289,11 @@ class Model(object):
 
 def main():
     conf = Config()
+    import json
+    d = conf.__dict__.copy()
+    d.pop('logger')
+    j = json.dumps(d, indent=2)
+    conf.logger.info('\n' + j)
     model = Model(conf)
 
     if conf.action == 'process':

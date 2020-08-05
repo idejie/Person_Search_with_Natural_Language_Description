@@ -83,19 +83,25 @@ class Language_Subnet(nn.Module):
         x_emb = torch.cat([x_w_t, x_v], dim=2)
 
         # print('x_emb', x_emb.shape)
+
         hidden_state_0 = torch.zeros((self.conf.rnn_layers, x_emb.size(1), self.conf.rnn_hidden_size))
         cell_state_0 = torch.zeros((self.conf.rnn_layers, x_emb.size(1), self.conf.rnn_hidden_size))
         if self.conf.gpu_id != -1:
             hidden_state_0 = hidden_state_0.cuda()
             cell_state_0 = cell_state_0.cuda()
-        rnn_out, _ = self.rnn(x_emb, (hidden_state_0, cell_state_0))
+        if self.conf.amp:
+            from torch.cuda.amp import autocast
+            with autocast():
+                rnn_out, _ = self.rnn(x_emb.float(), (hidden_state_0.float(), cell_state_0.float()))
+        else:
+            rnn_out, _ = self.rnn(x_emb, (hidden_state_0, cell_state_0))
         # print('rnn_out', rnn_out.shape) # batch_size, seq_len, 512
         if self.conf.rnn_layers == 1:
             rnn_out = self.dropout(rnn_out)
         # print('attn_out', attn_out.shape)
         attn_out = self.attention(image_feats, rnn_out)
         out = torch.sum(attn_out, dim=1)
-        out = self.sigmoid(out)
+        # out = self.sigmoid(out)
         # print(out.shape, 'out')  # batch_size, 1
         return out
 

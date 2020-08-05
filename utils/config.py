@@ -17,13 +17,13 @@ class Config(object):
         self.n_original_captions = 2
         self.max_length = 50
         self.epochs = 50
-        self.amp = False
+        self.amp = True
         self.embedding_size = 512
         self.images_dir = 'data/CUHK-PEDES/imgs'
         self.checkpoints_dir = 'checkpoints'
         self.rnn_hidden_size = 512
         self.output_size = 512
-        self.batch_size = 64
+        self.batch_size = 100
         self.top_k = [1, 5, 10]
         self.image_size = (256, 256)
         self.eval_interval = 100
@@ -31,8 +31,4 @@ class Config(object):
         self.rnn_layers = 1
         self.rnn_dropout = 0.5
         self.backend = 'cudnn'  # nn|cudnn
-        import json
-        d = self.__dict__.copy()
-        d.pop('logger')
-        j = json.dumps(d, indent=2)
-        self.logger.info('\n' + j)
+
