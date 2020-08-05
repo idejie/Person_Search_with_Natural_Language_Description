@@ -39,9 +39,13 @@
     - [x] Attention over visual units
     - [x] Word-level gates for visual units
     - [x] train
-    - [ ] valid
-    - [ ] test
+    - [x] valid
+    - [x] test
+    - [x] metrics
+    - [x] checkpoints
 - [ ] Web Visualization
+    - [ ] API
+    - [ ] Font
 
 ## References
 - [[ShuangLI59/Person-Search-with-Natural-Language-Description]](https://github.com/ShuangLI59/Person-Search-with-Natural-Language-Description)

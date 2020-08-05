@@ -1,8 +1,10 @@
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.backends import cudnn
 from torch.optim import Adam
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from dataset import CUHK_PEDES
 from model import GNA_RNN
@@ -34,12 +36,20 @@ class Model(object):
             train_set, valid_set, test_set, vocab = self.load_data()
             conf.vocab_size = vocab['UNK'] + 1
             self.train_set = CUHK_PEDES(conf, train_set, is_train=True)
-            self.valid_set = CUHK_PEDES(conf, valid_set)
-            self.test_set = CUHK_PEDES(conf, test_set)
+            self.valid_query_set = CUHK_PEDES(conf, valid_set, query_or_db='query')
+            self.valid_db_set = CUHK_PEDES(conf, valid_set, query_or_db='db')
+            self.test_query_set = CUHK_PEDES(conf, test_set, query_or_db='query')
+            self.test_db_set = CUHK_PEDES(conf, test_set, query_or_db='db')
             self.train_loader = DataLoader(self.train_set, batch_size=conf.batch_size, num_workers=conf.num_workers,
                                            shuffle=True)
-            self.valid_loader = DataLoader(self.valid_set, batch_size=conf.batch_size, num_workers=conf.num_workers)
-            self.test_loader = DataLoader(self.test_set, batch_size=1)
+            self.valid_query_loader = DataLoader(self.valid_query_set, batch_size=conf.batch_size,
+                                                 num_workers=conf.num_workers)
+            self.valid_db_loader = DataLoader(self.valid_db_set, batch_size=conf.batch_size,
+                                              num_workers=conf.num_workers)
+            self.test_query_loader = DataLoader(self.test_query_set, batch_size=conf.batch_size,
+                                                num_workers=conf.num_workers)
+            self.test_db_loader = DataLoader(self.test_db_set, batch_size=conf.batch_size,
+                                             num_workers=conf.num_workers)
 
             # init network
             self.net = GNA_RNN(conf)
@@ -101,10 +111,12 @@ class Model(object):
             json.dump(test_set, f)
 
     def train(self):
+        # train stage
         for e in range(self.conf.epochs):
             for b, (images, captions, labels) in enumerate(self.train_loader):
                 self.net.train()
                 self.optimizer.zero_grad()
+
                 labels = labels.unsqueeze(-1).float()
                 if self.conf.gpu_id != -1:
                     self.net.cuda()
@@ -117,31 +129,109 @@ class Model(object):
                     f'Epoch {e}/{self.conf.epochs} Batch {b}/{len(self.train_loader)}, Loss:{loss.item():.4f}')
                 loss.backward()
                 self.optimizer.step()
+                del images, captions, labels
+                if (b + 1) % self.conf.eval_interval == 0:
+                    self.eval()
             if self.lr_scheduler:
                 self.lr_scheduler.step()
+            if (e + 1) % self.conf.test_interval == 0:
+                self.test()
 
     def test(self):
+        # test stage
         self.net.eval()
-        for b_cap, (correct_images, query_captions, _) in enumerate(self.test_loader):
-            if self.conf.gpu_id != -1:
-                self.net.cuda()
-                correct_images = correct_images.cuda()
-                query_captions = query_captions.cuda()
-            for b_img, (database_images,_,_) in enumerate(self.test_loader):
-                if self.conf.gpu_id !=-1:
-                    database_images = database_images.cuda()
-                out = self.net(database_images, query_captions)
-
-            print(out)
-            loss = self.criterion(out, labels)
+        n_query = len(self.test_query_loader.dataset)
+        n_database = len(self.test_db_loader.dataset)
+        out_matrix = np.zeros((n_query, n_database))
+        labels_matrix = np.zeros((n_query, n_database))
+        eval_bar = tqdm(total=len(self.test_query_loader) * len(self.test_db_loader.dataset.dataset),
+                        desc='Test Stage')
+        with torch.no_grad():
+            # images: for d in db
+            for d, (images, indexes_d) in enumerate(self.test_db_loader):
+                if self.conf.gpu_id != -1:
+                    images = images.cuda()
+                images_feats_out = self.net.cnn(images)
+                # caption: for q in  query
+                for q, (captions, indexes_q) in enumerate(self.test_query_loader):
+                    if self.conf.gpu_id != -1:
+                        captions = captions.cuda()
+                    for image_out, index_d in zip(images_feats_out, indexes_d):
+                        image_out_repeat = image_out.repeat(len(captions), 1)
+                        index_d_repeat = index_d.repeat(len(captions), 1)
+                        # print(image_out_repeat.shape,index_d_repeat.shape)
+                        outs = self.net.language_subnet(image_out_repeat, captions)
+                        eval_bar.update(1)
+                        out_matrix[indexes_q, index_d_repeat] = outs.squeeze(1).cpu().detach().numpy()
+                        labels = (index_d_repeat == indexes_q) + 0
+                        labels_matrix[indexes_q, index_d_repeat] = labels.numpy()
+        out_matrix = torch.from_numpy(out_matrix)
+        labels_matrix = torch.from_numpy(labels_matrix)
+        eval_bar.close()
+        if self.conf.gpu_id != -1:
+            out_matrix = out_matrix.cuda()
+            labels_matrix = labels_matrix.cuda()
+        loss = self.criterion(out_matrix, labels_matrix)
+        self.logger.info(f'Test average loss: {loss.item():.4f}')
+        metrics = self.calculate_metrics(out_matrix, labels_matrix)
+        return loss, metrics
 
     def eval(self):
+        # eval stage
         self.net.eval()
-        for b, (images, captions, labels) in enumerate(self.valid_loader):
-            pass
+        n_query = len(self.valid_query_loader.dataset)
+        n_database = len(self.valid_db_loader.dataset)
+        out_matrix = np.zeros((n_query, n_database))
+        labels_matrix = np.zeros((n_query, n_database))
+        eval_bar = tqdm(total=len(self.valid_query_loader) * len(self.valid_db_loader.dataset.dataset),
+                        desc='Eval Stage')
+        with torch.no_grad():
+            # images: for d in db
+            for d, (images, indexes_d) in enumerate(self.valid_db_loader):
+                if self.conf.gpu_id != -1:
+                    images = images.cuda()
+                images_feats_out = self.net.cnn(images)
+                # caption: for q in  query
+                for q, (captions, indexes_q) in enumerate(self.valid_query_loader):
+                    if self.conf.gpu_id != -1:
+                        captions = captions.cuda()
+                    # repeat image for batch input
+                    for image_out, index_d in zip(images_feats_out, indexes_d):
+                        image_out_repeat = image_out.repeat(len(captions), 1)
+                        index_d_repeat = index_d.repeat(len(captions), 1)
+                        outs = self.net.language_subnet(image_out_repeat, captions)
+                        eval_bar.update(1)
+                        out_matrix[indexes_q, index_d_repeat] = outs.squeeze(1).cpu().detach().numpy()
+                        labels = (index_d_repeat == indexes_q) + 0
+                        labels_matrix[indexes_q, index_d_repeat] = labels.numpy()
+        out_matrix = torch.from_numpy(out_matrix)
+        labels_matrix = torch.from_numpy(labels_matrix)
+        eval_bar.close()
+        if self.conf.gpu_id != -1:
+            out_matrix = out_matrix.cuda()
+            labels_matrix = labels_matrix.cuda()
+        loss = self.criterion(out_matrix, labels_matrix)
+        self.logger.info(f'Eval average loss: {loss.item():.4f}')
+        metrics = self.calculate_metrics(out_matrix, labels_matrix)
+        return loss, metrics
 
     def web(self):
         pass
+
+    def calculate_metrics(self, out_matrix, labels_matrix):
+        sorted_indexes = out_matrix.argsort(dim=1)
+        r = []
+        for k in self.conf.top_k:
+            n_corrects = 0
+            indexes_k = sorted_indexes[:, :k]
+            for index_k, labels in zip(indexes_k, labels_matrix):
+                ret = labels[index_k]
+                if sum(ret) > 0:
+                    n_corrects += 1
+            acc = n_corrects / len(labels_matrix) * 100.0
+            self.logger.info(f'top-{k} acc: {acc:.2f}')
+            r.append(acc)
+        return r
 
 
 def main():

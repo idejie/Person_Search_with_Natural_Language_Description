@@ -1,6 +1,7 @@
 import os
 import random
 
+import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data.dataset import Dataset
@@ -14,7 +15,7 @@ class CUHK_PEDES(Dataset):
 
     """
 
-    def __init__(self, conf, dataset, is_train=False):
+    def __init__(self, conf, dataset, is_train=False, query_or_db='query'):
         """ init CUHK_PEDES class
 
         Args:
@@ -23,16 +24,22 @@ class CUHK_PEDES(Dataset):
         """
         self.split = dataset[0]["split"]
         self.is_train = is_train
-        conf.logger.info(f'init {self.split} dataset')
+        self.query_or_db = query_or_db
         self.dataset = dataset
+        if not is_train:
+            self.dataset = self.dataset
         self.config = conf
         self.positive_samples = conf.positive_samples
         self.negative_samples = conf.negative_samples
         self.n_original_captions = conf.n_original_captions
         self.transform = transforms.Compose([
-            transforms.Resize((256, 256)),
+            transforms.Resize(conf.image_size),
             transforms.ToTensor()
         ])
+        if is_train:
+            conf.logger.info(f'init {self.split}  dataset, length:{len(self)}')
+        else:
+            conf.logger.info(f'init {self.split} {query_or_db}  dataset, length:{len(self)}')
 
     def __getitem__(self, index):
         """ get an item of dataset by index
@@ -69,22 +76,35 @@ class CUHK_PEDES(Dataset):
                 # transform captions to (1,max_length) one-hot vector
                 cap_index = neg_data['index_captions'][neg_cap_index]
                 assert neg_data != pos_data, 'the negative sample should different with positive sample'
+            image = Image.open(image_path)
+            # resize image to 256x256
+            image = self.transform(image)
+            # caption
+            caption = np.zeros((self.config.max_length, self.config.vocab_size))
+            for i, cap_i in enumerate(cap_index):
+                if i < self.config.max_length:
+                    caption[i][cap_i] = 1
+            caption = torch.FloatTensor(caption)
+            return image, caption, label
         else:
-            img_index = index // self.n_original_captions
-            cap_index = img_index % self.n_original_captions
-            data = self.dataset[img_index]
-            image_path = os.path.join(self.config.images_dir, data['file_path'])
-            cap_index = data['index_captions'][cap_index]
-            label = 1
-        image = Image.open(image_path)
-        # resize image to 256x256
-        image = self.transform(image)
-        # caption
-        caption = torch.zeros((self.config.max_length, self.config.vocab_size))
-        for i, cap_i in enumerate(cap_index):
-            if i < self.config.max_length:
-                caption[i][cap_i] = 1
-        return image, caption, label
+            if self.query_or_db == 'query':
+                data_index = index // self.n_original_captions
+                data = self.dataset[data_index]
+                cap_index = index % self.n_original_captions
+                cap_index = data['index_captions'][cap_index]
+                caption = np.zeros((self.config.max_length, self.config.vocab_size))
+                for i, cap_i in enumerate(cap_index):
+                    if i < self.config.max_length:
+                        caption[i][cap_i] = 1
+                caption = torch.FloatTensor(caption)
+                return caption, index
+            elif self.query_or_db == 'db':
+                data = self.dataset[index]
+                image_path = os.path.join(self.config.images_dir, data['file_path'])
+                image = Image.open(image_path)
+                # resize image to 256x256
+                image = self.transform(image)
+                return image, index
 
     def __len__(self):
         """get the length of the dataset
@@ -95,4 +115,7 @@ class CUHK_PEDES(Dataset):
         if self.is_train:
             return len(self.dataset) * (self.negative_samples + self.positive_samples) * self.n_original_captions
         else:
-            return len(self.dataset) * self.n_original_captions
+            if self.query_or_db == 'query':
+                return len(self.dataset) * self.n_original_captions
+            elif self.query_or_db == 'db':
+                return len(self.dataset)
