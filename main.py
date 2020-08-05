@@ -136,6 +136,7 @@ class Model(object):
                 self.lr_scheduler.step()
             if (e + 1) % self.conf.test_interval == 0:
                 self.test()
+            self.save_checkpoint(e)
 
     def test(self):
         # test stage
@@ -232,6 +233,26 @@ class Model(object):
             self.logger.info(f'top-{k} acc: {acc:.2f}')
             r.append(acc)
         return r
+
+    def save_checkpoint(self, e, checkpoints_dir=None):
+        file_name = f'epoch_{e}.cpt'
+        if checkpoints_dir is None:
+            checkpoints_dir = self.conf.checkpoints_dir
+        file_path = os.path.join(checkpoints_dir, file_name)
+        content = {
+            'model': self.net.state_dict(),
+            'epoch': e
+        }
+        torch.save(content, file_path)
+        self.logger.info(f'saved checkpoints: {file_name}')
+
+    def load_checkpoint(self, checkpoints_dir=None, file_name=None):
+        if checkpoints_dir is None or file_name is None:
+            raise FileNotFoundError('please set checkpoint directory and filename')
+        file_path = os.path.join(checkpoints_dir, file_name)
+        content = torch.load(file_path)
+        self.net.load_state_dict(content)
+        self.logger.info(f'loaded checkpoints from `{file_path}`')
 
 
 def main():

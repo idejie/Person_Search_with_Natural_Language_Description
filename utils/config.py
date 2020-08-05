@@ -19,6 +19,7 @@ class Config(object):
         self.epochs = 50
         self.embedding_size = 512
         self.images_dir = 'data/CUHK-PEDES/imgs'
+        self.checkpoints_dir = 'checkpoints'
         self.rnn_hidden_size = 512
         self.output_size = 512
         self.batch_size = 64
