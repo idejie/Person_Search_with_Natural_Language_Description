@@ -43,9 +43,9 @@
     - [x] test
     - [x] metrics
     - [x] checkpoints
-- [ ] Accelerate
+- [x] Accelerate
     - [x] AMP: automatic mixed precision
-    - [ ] Parallel
+    - [x] Parallel
 - [ ] Web Visualization
     - [ ] API
     - [ ] Font

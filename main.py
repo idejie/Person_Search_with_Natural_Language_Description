@@ -4,6 +4,7 @@ import torch.nn as nn
 from torch.backends import cudnn
 from torch.optim import Adam
 from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 
 from dataset import CUHK_PEDES
@@ -11,8 +12,16 @@ from model import GNA_RNN
 from utils.config import Config
 from utils.preprocess import *
 
-if Config().amp:
-    from torch.cuda.amp import autocast
+config = Config()
+if config.action in ['train', 'test']:
+    if config.amp:
+        from torch.cuda.amp import autocast
+    if config.parallel:
+        from torch import distributed
+
+        # init distributed backend
+        distributed.init_process_group(backend='nccl')
+        # configuration for different GPUs
 
 
 class Model(object):
@@ -25,10 +34,17 @@ class Model(object):
     def __init__(self, conf):
         conf.logger.info(f'CUDA is available? {torch.cuda.is_available()}')
         if type(conf.gpu_id) == int and torch.cuda.is_available():
-            self.device = torch.device('cuda:' + str(conf.gpu_id))
+            device = f'Single-GPU:{conf.gpu_id}'
+            self.device = torch.device('cuda', device=conf.gpu_id)
+        elif type(conf.gpu_id) == list and len(conf.gpu_id) > 0 and torch.cuda.device_count() > 1:
+            device = f'Multi-GPU:{conf.gpu_id}'
+            local_rank = distributed.get_rank()
+            torch.cuda.set_device(local_rank)
+            self.device = torch.device('cuda', local_rank)
         else:
-            self.device = torch.device('cpu')
-        conf.logger.info(self.device)
+            device = torch.device('cpu')
+            self.device = device
+        conf.logger.info(device)
         if conf.backend == 'cudnn' and torch.cuda.is_available():
             cudnn.benchmark = True
 
@@ -42,24 +58,46 @@ class Model(object):
         if conf.action != 'process':
             train_set, valid_set, test_set, vocab = self.load_data()
             conf.vocab_size = vocab['UNK'] + 1
+
             self.train_set = CUHK_PEDES(conf, train_set, is_train=True)
             self.valid_query_set = CUHK_PEDES(conf, valid_set, query_or_db='query')
             self.valid_db_set = CUHK_PEDES(conf, valid_set, query_or_db='db')
             self.test_query_set = CUHK_PEDES(conf, test_set, query_or_db='query')
             self.test_db_set = CUHK_PEDES(conf, test_set, query_or_db='db')
-            self.train_loader = DataLoader(self.train_set, batch_size=conf.batch_size, num_workers=conf.num_workers,
-                                           shuffle=True)
-            self.valid_query_loader = DataLoader(self.valid_query_set, batch_size=conf.batch_size,
+            if conf.parallel:
+                self.train_loader = DataLoader(self.train_set, batch_size=conf.batch_size, num_workers=conf.num_workers,
+                                               shuffle=True, sampler=DistributedSampler(self.train_set))
+                self.valid_query_loader = DataLoader(self.valid_query_set, batch_size=conf.batch_size,
+                                                     num_workers=conf.num_workers,
+                                                     sampler=DistributedSampler(self.valid_query_set))
+                self.valid_db_loader = DataLoader(self.valid_db_set, batch_size=conf.batch_size,
+                                                  num_workers=conf.num_workers,
+                                                  sampler=DistributedSampler(self.valid_db_set))
+                self.test_query_loader = DataLoader(self.test_query_set, batch_size=conf.batch_size,
+                                                    num_workers=conf.num_workers,
+                                                    sampler=DistributedSampler(self.test_query_set))
+                self.test_db_loader = DataLoader(self.test_db_set, batch_size=conf.batch_size,
+                                                 num_workers=conf.num_workers,
+                                                 sampler=DistributedSampler(self.test_db_set))
+            else:
+                self.train_loader = DataLoader(self.train_set, batch_size=conf.batch_size, num_workers=conf.num_workers,
+                                               shuffle=True)
+                self.valid_query_loader = DataLoader(self.valid_query_set, batch_size=conf.batch_size,
+                                                     num_workers=conf.num_workers)
+                self.valid_db_loader = DataLoader(self.valid_db_set, batch_size=conf.batch_size,
+                                                  num_workers=conf.num_workers)
+                self.test_query_loader = DataLoader(self.test_query_set, batch_size=conf.batch_size,
+                                                    num_workers=conf.num_workers)
+                self.test_db_loader = DataLoader(self.test_db_set, batch_size=conf.batch_size,
                                                  num_workers=conf.num_workers)
-            self.valid_db_loader = DataLoader(self.valid_db_set, batch_size=conf.batch_size,
-                                              num_workers=conf.num_workers)
-            self.test_query_loader = DataLoader(self.test_query_set, batch_size=conf.batch_size,
-                                                num_workers=conf.num_workers)
-            self.test_db_loader = DataLoader(self.test_db_set, batch_size=conf.batch_size,
-                                             num_workers=conf.num_workers)
 
             # init network
             self.net = GNA_RNN(conf)
+            if conf.parallel:
+                self.net.to(self.device)
+                self.net = torch.nn.parallel.DistributedDataParallel(self.net, device_ids=[local_rank],
+                                                                     output_device=local_rank)
+
             self.criterion = nn.BCEWithLogitsLoss()
             self.optimizer = Adam(params=self.net.parameters(), lr=1e-5)
             self.lr_scheduler = None
@@ -290,28 +328,26 @@ class Model(object):
 
 
 def main():
-    conf = Config()
-    import json
-    d = conf.__dict__.copy()
+    d = config.__dict__.copy()
     d.pop('logger')
     j = json.dumps(d, indent=2)
-    conf.logger.info('\n' + j)
-    model = Model(conf)
+    config.logger.info('\n' + j)
+    model = Model(config)
 
-    if conf.action == 'process':
-        conf.logger.info('start to pre-process data')
+    if config.action == 'process':
+        config.logger.info('start to pre-process data')
         model.process()
-    elif conf.action == 'train':
-        conf.logger.info('start to train')
+    elif config.action == 'train':
+        config.logger.info('start to train')
         model.train()
-    elif conf.action == 'test':
-        conf.logger.info('start to test')
+    elif config.action == 'test':
+        config.logger.info('start to test')
         model.test()
-    elif conf.action == 'web':
-        conf.logger.info('start to run a web')
+    elif config.action == 'web':
+        config.logger.info('start to run a web')
         model.web()
     else:
-        raise KeyError(f'No support fot this action: {conf.action}')
+        raise KeyError(f'No support fot this action: {config.action}')
 
 
 if __name__ == '__main__':
