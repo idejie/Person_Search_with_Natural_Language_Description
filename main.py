@@ -270,6 +270,8 @@ class Model(object):
         file_name = f'epoch_{e}.cpt'
         if checkpoints_dir is None:
             checkpoints_dir = self.conf.checkpoints_dir
+        if not os.path.exists(checkpoints_dir):
+            os.mkdir(checkpoints_dir)
         file_path = os.path.join(checkpoints_dir, file_name)
         content = {
             'model': self.net.state_dict(),
