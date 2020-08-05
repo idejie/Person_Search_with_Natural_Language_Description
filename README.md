@@ -34,7 +34,7 @@
 - [x] DataLoader
     - [x] CUDK-PEDES dataset
     - [x] sample negative
-- [ ]  Model: GNA-RNN
+- [x]  Model: GNA-RNN
     - [x] Visual units
     - [x] Attention over visual units
     - [x] Word-level gates for visual units
@@ -43,6 +43,9 @@
     - [x] test
     - [x] metrics
     - [x] checkpoints
+- [ ] Accelerate
+    - [ ] AMP: automatic mixed precision
+    - [ ] Parallel
 - [ ] Web Visualization
     - [ ] API
     - [ ] Font

@@ -17,6 +17,7 @@ class Config(object):
         self.n_original_captions = 2
         self.max_length = 50
         self.epochs = 50
+        self.amp = False
         self.embedding_size = 512
         self.images_dir = 'data/CUHK-PEDES/imgs'
         self.checkpoints_dir = 'checkpoints'

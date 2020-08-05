@@ -11,6 +11,9 @@ from model import GNA_RNN
 from utils.config import Config
 from utils.preprocess import *
 
+if Config().amp:
+    from torch.cuda.amp import autocast
+
 
 class Model(object):
     """the class of model
@@ -20,11 +23,13 @@ class Model(object):
     """
 
     def __init__(self, conf):
+        conf.logger.info(f'CUDA is available? {torch.cuda.is_available()}')
         if type(conf.gpu_id) == int and torch.cuda.is_available():
             self.device = torch.device('cuda:' + str(conf.gpu_id))
+            conf.logger.info(self.device)
         if conf.backend == 'cudnn' and torch.cuda.is_available():
             cudnn.benchmark = True
-        conf.logger.info(self.device)
+
         self.logger = conf.logger
         self.vocab_dir = conf.vocab_dir
         self.data_dir = conf.data_dir
@@ -112,6 +117,8 @@ class Model(object):
 
     def train(self):
         # train stage
+        if self.conf.amp:
+            scaler = torch.cuda.amp.GradScaler()
         for e in range(self.conf.epochs):
             for b, (images, captions, labels) in enumerate(self.train_loader):
                 self.net.train()
@@ -123,13 +130,20 @@ class Model(object):
                     images = images.cuda()
                     captions = captions.cuda()
                     labels = labels.cuda()
-                out = self.net(images, captions)
-                loss = self.criterion(out, labels)
+                if self.conf.amp:
+                    with autocast():
+                        out = self.net(images, captions)
+                        loss = self.criterion(out, labels)
+                    scaler.scale(loss).backward()
+                    scaler.step()
+                    scaler.update()
+                else:
+                    out = self.net(images, captions)
+                    loss = self.criterion(out, labels)
+                    loss.backward()
+                    self.optimizer.step()
                 self.logger.info(
                     f'Epoch {e}/{self.conf.epochs} Batch {b}/{len(self.train_loader)}, Loss:{loss.item():.4f}')
-                loss.backward()
-                self.optimizer.step()
-                del images, captions, labels
                 if (b + 1) % self.conf.eval_interval == 0:
                     self.eval()
             if self.lr_scheduler:
@@ -161,7 +175,11 @@ class Model(object):
                         image_out_repeat = image_out.repeat(len(captions), 1)
                         index_d_repeat = index_d.repeat(len(captions), 1)
                         # print(image_out_repeat.shape,index_d_repeat.shape)
-                        outs = self.net.language_subnet(image_out_repeat, captions)
+                        if self.conf.amp:
+                            with autocast():
+                                outs = self.net.language_subnet(image_out_repeat, captions)
+                        else:
+                            outs = self.net.language_subnet(image_out_repeat, captions)
                         eval_bar.update(1)
                         out_matrix[indexes_q, index_d_repeat] = outs.squeeze(1).cpu().detach().numpy()
                         labels = (index_d_repeat == indexes_q) + 0
@@ -172,7 +190,11 @@ class Model(object):
         if self.conf.gpu_id != -1:
             out_matrix = out_matrix.cuda()
             labels_matrix = labels_matrix.cuda()
-        loss = self.criterion(out_matrix, labels_matrix)
+        if self.conf.amp:
+            with autocast():
+                loss = self.criterion(out_matrix, labels_matrix)
+        else:
+            loss = self.criterion(out_matrix, labels_matrix)
         self.logger.info(f'Test average loss: {loss.item():.4f}')
         metrics = self.calculate_metrics(out_matrix, labels_matrix)
         return loss, metrics
@@ -200,7 +222,11 @@ class Model(object):
                     for image_out, index_d in zip(images_feats_out, indexes_d):
                         image_out_repeat = image_out.repeat(len(captions), 1)
                         index_d_repeat = index_d.repeat(len(captions), 1)
-                        outs = self.net.language_subnet(image_out_repeat, captions)
+                        if self.conf.amp:
+                            with autocast():
+                                outs = self.net.language_subnet(image_out_repeat, captions)
+                        else:
+                            outs = self.net.language_subnet(image_out_repeat, captions)
                         eval_bar.update(1)
                         out_matrix[indexes_q, index_d_repeat] = outs.squeeze(1).cpu().detach().numpy()
                         labels = (index_d_repeat == indexes_q) + 0
@@ -211,7 +237,11 @@ class Model(object):
         if self.conf.gpu_id != -1:
             out_matrix = out_matrix.cuda()
             labels_matrix = labels_matrix.cuda()
-        loss = self.criterion(out_matrix, labels_matrix)
+        if self.conf.amp:
+            with autocast():
+                loss = self.criterion(out_matrix, labels_matrix)
+        else:
+            loss = self.criterion(out_matrix, labels_matrix)
         self.logger.info(f'Eval average loss: {loss.item():.4f}')
         metrics = self.calculate_metrics(out_matrix, labels_matrix)
         return loss, metrics
@@ -258,6 +288,7 @@ class Model(object):
 def main():
     conf = Config()
     model = Model(conf)
+
     if conf.action == 'process':
         conf.logger.info('start to pre-process data')
         model.process()
