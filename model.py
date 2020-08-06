@@ -8,8 +8,9 @@ class Attention(nn.Module):
         super(Attention, self).__init__()
         # generate visual units
         self.visual_unit = nn.Sequential(
-            nn.Linear(4096, conf.embedding_size),  # cls-1
-            nn.Linear(conf.embedding_size, conf.output_size)  # cls-2
+            nn.Linear(4096, conf.embedding_size), # cls-1
+            nn.Linear(conf.embedding_size, conf.output_size),  # cls-2
+            nn.BatchNorm1d(conf.output_size),
         )
 
         # Unit-level attention
@@ -17,13 +18,15 @@ class Attention(nn.Module):
             nn.Linear(conf.rnn_hidden_size, conf.output_size),  # attention-fc1
             nn.ReLU(),
             nn.Linear(conf.output_size, conf.output_size),  # attention-fc2
-            nn.Softmax(dim=2)
+            nn.Softmax(dim=2),
+            nn.BatchNorm1d(conf.max_length),
         )
 
         # word-level gate
         self.word_gate = nn.Sequential(
             nn.Linear(conf.rnn_hidden_size, 1),  # gate=fc1
-            nn.Sigmoid()
+            nn.Sigmoid(),
+            nn.BatchNorm1d(conf.max_length),
         )
 
     def forward(self, images_feats, rnn_out):
@@ -45,7 +48,9 @@ class Attention(nn.Module):
 class Language_Subnet(nn.Module):
     def __init__(self, conf):
         super(Language_Subnet, self).__init__()
-        self.word_emb = nn.Linear(conf.vocab_size, conf.embedding_size)
+        self.word_emb = nn.Sequential(
+            nn.Embedding(conf.vocab_size, conf.embedding_size)
+        )
         self.image_emb = nn.Sequential(
             nn.Linear(4096, conf.embedding_size),  # vis-fc1
             nn.Linear(conf.embedding_size, conf.embedding_size)  # vis-fc2
@@ -96,7 +101,7 @@ class Language_Subnet(nn.Module):
         # print('attn_out', attn_out.shape)
         attn_out = self.attention(image_feats, rnn_out)
         out = torch.sum(attn_out, dim=1) # sum
-        # out = self.sigmoid(out)
+        # out = torch.sigmoid(out)
         # print(out.shape, 'out')  # batch_size, 1
         return out
 

@@ -57,11 +57,13 @@ class CUHK_PEDES(Dataset):
             pos_data = self.dataset[pos_img_index]
             image_path = os.path.join(self.config.images_dir, pos_data['file_path'])
             # sample caption
-            t_index = index % (self.negative_samples + self.positive_samples)
-            if t_index < self.n_original_captions:
+            t_index = index % ((self.negative_samples + self.positive_samples) * self.n_original_captions)
+
+            if t_index < self.positive_samples * self.n_original_captions:
                 # positive
                 # transform captions to (1,max_length) one-hot vector
-                cap_index = pos_data['index_captions'][t_index]
+                cap_index = t_index % self.n_original_captions
+                cap_index = pos_data['index_captions'][cap_index]
                 label = 1
             else:
                 # negative samples
@@ -80,11 +82,11 @@ class CUHK_PEDES(Dataset):
             # resize image to 256x256
             image = self.transform(image)
             # caption
-            caption = np.zeros((self.config.max_length, self.config.vocab_size))
+            caption = np.zeros(self.config.max_length)
             for i, cap_i in enumerate(cap_index):
                 if i < self.config.max_length:
-                    caption[i][cap_i] = 1
-            caption = torch.FloatTensor(caption)
+                    caption[i] = cap_i
+            caption = torch.LongTensor(caption)
             return image, caption, label
         else:
             if self.query_or_db == 'query':
@@ -92,11 +94,11 @@ class CUHK_PEDES(Dataset):
                 data = self.dataset[data_index]
                 cap_index = index % self.n_original_captions
                 cap_index = data['index_captions'][cap_index]
-                caption = np.zeros((self.config.max_length, self.config.vocab_size))
+                caption = np.zeros(self.config.max_length)
                 for i, cap_i in enumerate(cap_index):
                     if i < self.config.max_length:
-                        caption[i][cap_i] = 1
-                caption = torch.FloatTensor(caption)
+                        caption[i] = cap_i
+                caption = torch.LongTensor(caption)
                 return caption, index
             elif self.query_or_db == 'db':
                 data = self.dataset[index]

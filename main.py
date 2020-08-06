@@ -35,17 +35,17 @@ class Model(object):
     def __init__(self, conf):
         conf.logger.info(f'CUDA is available? {torch.cuda.is_available()}')
         if type(conf.gpu_id) == int and torch.cuda.is_available():
-            device = f'Single-GPU:{conf.gpu_id}'
             self.device = torch.device(f'cuda:{conf.gpu_id}')
+
         elif type(conf.gpu_id) == list and len(conf.gpu_id) > 0 and torch.cuda.device_count() > 1:
-            device = f'Multi-GPU:{conf.gpu_id}'
             local_rank = distributed.get_rank()
             torch.cuda.set_device(local_rank)
             self.device = torch.device('cuda', local_rank)
         else:
             device = torch.device('cpu')
             self.device = device
-        conf.logger.info(device)
+        torch.cuda.set_device(self.device)
+        conf.logger.info(self.device)
         if conf.backend == 'cudnn' and torch.cuda.is_available():
             cudnn.benchmark = True
 
@@ -82,7 +82,7 @@ class Model(object):
                                                  sampler=DistributedSampler(self.test_db_set))
             else:
                 self.train_loader = DataLoader(self.train_set, batch_size=conf.batch_size, num_workers=conf.num_workers,
-                                               shuffle=True)
+                                               shuffle=False)
                 self.valid_query_loader = DataLoader(self.valid_query_set, batch_size=conf.batch_size,
                                                      num_workers=conf.num_workers)
                 self.valid_db_loader = DataLoader(self.valid_db_set, batch_size=conf.batch_size,
@@ -94,8 +94,8 @@ class Model(object):
 
             # init network
             self.net = GNA_RNN(conf)
+            self.net.to(self.device)
             if conf.parallel:
-                self.net.to(self.device)
                 self.net = torch.nn.parallel.DistributedDataParallel(self.net, device_ids=[local_rank],
                                                                      output_device=local_rank)
                 self.optimizer = Adam([
@@ -190,11 +190,14 @@ class Model(object):
                     scaler.update()
                 else:
                     out = self.net(images, captions)
+                    # print(torch.sigmoid(out)[:8], labels[:8])
                     loss = self.criterion(out, labels)
+
                     loss.backward()
                     self.optimizer.step()
                 if self.lr_scheduler:
                     self.lr_scheduler.step()
+
                 self.logger.info(
                     f'Epoch {e}/{self.conf.epochs} Batch {b}/{len(self.train_loader)}, Loss:{loss.item():.4f}')
                 if (b + 1) % self.conf.eval_interval == 0:
@@ -211,7 +214,7 @@ class Model(object):
         n_database = len(self.test_db_loader.dataset)
         out_matrix = np.zeros((n_query, n_database))
         labels_matrix = np.zeros((n_query, n_database))
-        eval_bar = tqdm(total=len(self.test_query_loader) * len(self.test_db_loader.dataset.dataset),
+        test_bar = tqdm(total=len(self.test_query_loader) * len(self.test_db_loader.dataset.dataset),
                         desc='Test Stage')
         with torch.no_grad():
             # images: for d in db
@@ -236,13 +239,14 @@ class Model(object):
                                 outs = self.net(image_out_repeat, captions, query=True)
                         else:
                             outs = self.net(image_out_repeat, captions, query=True)
-                        eval_bar.update(1)
+                        test_bar.update(1)
+                        outs = torch.sigmoid(outs)
                         out_matrix[indexes_q, index_d_repeat] = outs.squeeze(1).cpu().detach().numpy()
-                        labels = (index_d_repeat == indexes_q) + 0
+                        labels = (index_d_repeat == indexes_q // 2) + 0
                         labels_matrix[indexes_q, index_d_repeat] = labels.numpy()
         out_matrix = torch.from_numpy(out_matrix)
         labels_matrix = torch.from_numpy(labels_matrix)
-        eval_bar.close()
+        test_bar.close()
         if self.conf.gpu_id != -1:
             out_matrix = out_matrix.cuda()
             labels_matrix = labels_matrix.cuda()
@@ -288,12 +292,14 @@ class Model(object):
                         else:
                             outs = self.net(image_out_repeat, captions, query=True)
                         eval_bar.update(1)
+                        outs = torch.sigmoid(outs)
                         out_matrix[indexes_q, index_d_repeat] = outs.squeeze(1).cpu().detach().numpy()
-                        labels = (index_d_repeat == indexes_q) + 0
+                        labels = (index_d_repeat == indexes_q // 2) + 0
                         labels_matrix[indexes_q, index_d_repeat] = labels.numpy()
+        eval_bar.close()
         out_matrix = torch.from_numpy(out_matrix)
         labels_matrix = torch.from_numpy(labels_matrix)
-        eval_bar.close()
+
         if self.conf.gpu_id != -1:
             out_matrix = out_matrix.cuda()
             labels_matrix = labels_matrix.cuda()
@@ -349,6 +355,7 @@ class Model(object):
                         out = self.net(images_feats_out, captions, query=True)
                 else:
                     out = self.net(images_feats_out, captions, query=True)
+                out = torch.sigmoid(out)
                 out_matrix[indexes_q] = out.squeeze(1).cpu().detach().numpy()
             out_matrix = torch.tensor(out_matrix)
             _, top_k_indexes = out_matrix.topk(k, sorted=True)

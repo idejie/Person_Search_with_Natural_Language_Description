@@ -6,7 +6,7 @@ class Config(object):
         self.action = 'train'  # process, train or test
         logger.add('logs/{time:YYYY-MM-DD_HH-mm-ss}.log')
         self.logger = logger
-        self.gpu_id = [0, 1]
+        self.gpu_id = 1
         self.num_workers = 5
         self.vocab_dir = 'vocab'
         self.data_dir = 'data'
@@ -31,7 +31,7 @@ class Config(object):
         self.rnn_layers = 1
         self.rnn_dropout = 0.1
         self.backend = 'cudnn'  # nn|cudnn
-        self.parallel = True
+        self.parallel = False
         self.web_debug = True
         self.language_lr = 1e-3
         self.cnn_lr = 1e-5
