@@ -53,7 +53,7 @@
     - [x] AMP: automatic mixed precision
     - [x] Parallel
 - [ ] Web Visualization
-    - [ ] API
+    - [x] API
     - [ ] Front End
 
 ## References

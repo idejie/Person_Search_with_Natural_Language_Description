@@ -320,7 +320,8 @@ class Model(object):
     def web(self):
         from flask import Flask
         from flask import render_template
-        app = Flask("Person Search with Natural Language Description", static_folder='web', template_folder='web')
+        app = Flask("Person Search with Natural Language Description", static_folder='data/CUHK-PEDES/imgs',
+                    template_folder='web')
         self.load_checkpoint('checkpoints', 'epoch_8.cpt')
 
         @app.route('/')
