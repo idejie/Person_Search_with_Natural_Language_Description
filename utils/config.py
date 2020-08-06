@@ -4,9 +4,9 @@ from loguru import logger
 class Config(object):
     def __init__(self):
         self.action = 'train'  # process, train or test
-        logger.add('logs/{time: YYYY-MM-DD_HH-mm-ss}.log')
+        logger.add('logs/{time:YYYY-MM-DD_HH-mm-ss}.log')
         self.logger = logger
-        self.gpu_id = 1
+        self.gpu_id = [0, 1]
         self.num_workers = 5
         self.vocab_dir = 'vocab'
         self.data_dir = 'data'
@@ -26,9 +26,12 @@ class Config(object):
         self.batch_size = 100
         self.top_k = [1, 5, 10]
         self.image_size = (256, 256)
-        self.eval_interval = 500
+        self.eval_interval = 200
         self.test_interval = 1
         self.rnn_layers = 1
-        self.rnn_dropout = 0.5
+        self.rnn_dropout = 0.1
         self.backend = 'cudnn'  # nn|cudnn
-        self.parallel = False
+        self.parallel = True
+        self.web_debug = True
+        self.language_lr = 1e-3
+        self.cnn_lr = 1e-5

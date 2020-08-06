@@ -8,23 +8,21 @@ class Attention(nn.Module):
         super(Attention, self).__init__()
         # generate visual units
         self.visual_unit = nn.Sequential(
-            nn.Linear(4096, conf.embedding_size),
-            nn.BatchNorm1d(conf.embedding_size),
-            nn.ReLU(inplace=True),
-            nn.Linear(conf.embedding_size, conf.output_size)
+            nn.Linear(4096, conf.embedding_size),  # cls-1
+            nn.Linear(conf.embedding_size, conf.output_size)  # cls-2
         )
 
         # Unit-level attention
         self.unit_attention = nn.Sequential(
-            nn.Linear(conf.rnn_hidden_size, conf.output_size),
-            nn.ReLU(inplace=True),
-            nn.Linear(conf.output_size, conf.output_size),
+            nn.Linear(conf.rnn_hidden_size, conf.output_size),  # attention-fc1
+            nn.ReLU(),
+            nn.Linear(conf.output_size, conf.output_size),  # attention-fc2
             nn.Softmax(dim=2)
         )
 
         # word-level gate
         self.word_gate = nn.Sequential(
-            nn.Linear(conf.rnn_hidden_size, 1),
+            nn.Linear(conf.rnn_hidden_size, 1),  # gate=fc1
             nn.Sigmoid()
         )
 
@@ -40,7 +38,7 @@ class Attention(nn.Module):
         dotproct = torch.bmm(unit_attention_out, images_out.unsqueeze(2))
         # print('dotproct attn', dotproct.shape)  # (batch_size,seq_len,1)
         # (batch_size,seq_len,1) x (batch_size,seq_len,1) = (batch_size,seq_len,1)
-        affinity = dotproct * word_gate_out
+        affinity = dotproct * word_gate_out # elementwise multiplication
         return affinity
 
 
@@ -50,8 +48,6 @@ class Language_Subnet(nn.Module):
         self.word_emb = nn.Linear(conf.vocab_size, conf.embedding_size)
         self.image_emb = nn.Sequential(
             nn.Linear(4096, conf.embedding_size),  # vis-fc1
-            nn.BatchNorm1d(conf.embedding_size),
-            nn.ReLU(inplace=True),
             nn.Linear(conf.embedding_size, conf.embedding_size)  # vis-fc2
         )
         if conf.rnn_layers == 1:
@@ -59,7 +55,7 @@ class Language_Subnet(nn.Module):
                                hidden_size=conf.rnn_hidden_size,
                                num_layers=conf.rnn_layers
                                )
-            self.dropout = nn.Dropout(conf.rnn_dropout)
+            # self.dropout = nn.Dropout(conf.rnn_dropout)
         else:
             self.rnn = nn.LSTM(input_size=conf.embedding_size * 2,
                                hidden_size=conf.rnn_hidden_size,
@@ -68,7 +64,6 @@ class Language_Subnet(nn.Module):
                                )
         self.conf = conf
         self.attention = Attention(conf)
-        self.sigmoid = nn.Sigmoid()
 
     def forward(self, image_feats, captions):
         x_v = self.image_emb(image_feats)
@@ -96,11 +91,11 @@ class Language_Subnet(nn.Module):
         else:
             rnn_out, _ = self.rnn(x_emb, (hidden_state_0, cell_state_0))
         # print('rnn_out', rnn_out.shape) # batch_size, seq_len, 512
-        if self.conf.rnn_layers == 1:
-            rnn_out = self.dropout(rnn_out)
+        # if self.conf.rnn_layers == 1:
+        #     rnn_out = self.dropout(rnn_out)
         # print('attn_out', attn_out.shape)
         attn_out = self.attention(image_feats, rnn_out)
-        out = torch.sum(attn_out, dim=1)
+        out = torch.sum(attn_out, dim=1) # sum
         # out = self.sigmoid(out)
         # print(out.shape, 'out')  # batch_size, 1
         return out

@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 from torch.backends import cudnn
 from torch.optim import Adam
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
@@ -97,10 +98,20 @@ class Model(object):
                 self.net.to(self.device)
                 self.net = torch.nn.parallel.DistributedDataParallel(self.net, device_ids=[local_rank],
                                                                      output_device=local_rank)
+                self.optimizer = Adam([
+                    {'params': self.net.module.language_subnet.parameters(), 'lr': conf.language_lr},
+                    {'params': self.net.module.cnn.parameters(), 'lr': conf.cnn_lr}
+                ])
+            else:
+                self.optimizer = Adam([
+                    {'params': self.net.language_subnet.parameters(), 'lr': conf.language_lr},
+                    {'params': self.net.cnn.parameters(), 'lr': conf.cnn_lr}
+                ])
 
             self.criterion = nn.BCEWithLogitsLoss()
-            self.optimizer = Adam(params=self.net.parameters(), lr=1e-5)
-            self.lr_scheduler = None
+            all_steps = self.conf.epochs * len(self.train_loader)
+            self.lr_scheduler = CosineAnnealingLR(optimizer=self.optimizer,
+                                                  T_max=all_steps / 2 if conf.parallel else all_steps)
 
     def load_data(self):
         train_set_path = os.path.join(self.data_dir, 'train_set.json')
@@ -182,12 +193,13 @@ class Model(object):
                     loss = self.criterion(out, labels)
                     loss.backward()
                     self.optimizer.step()
+                if self.lr_scheduler:
+                    self.lr_scheduler.step()
                 self.logger.info(
                     f'Epoch {e}/{self.conf.epochs} Batch {b}/{len(self.train_loader)}, Loss:{loss.item():.4f}')
                 if (b + 1) % self.conf.eval_interval == 0:
                     self.eval()
-            if self.lr_scheduler:
-                self.lr_scheduler.step()
+
             self.save_checkpoint(e)
             if (e + 1) % self.conf.test_interval == 0:
                 self.test()
@@ -294,8 +306,71 @@ class Model(object):
         metrics = self.calculate_metrics(out_matrix, labels_matrix)
         return loss, metrics
 
+    def query_transform(self, query):
+        w2i_file = os.path.join(self.vocab_dir, 'w2i.json')
+        with open(w2i_file, 'r', encoding='utf8') as f:
+            w2i = json.load(f)
+        tokens = ''.join(c for c in query.strip().lower() if c not in string.punctuation)
+        tokens = tokens.split()
+        query_vector = []
+        for token in tokens:
+            query_vector.append(w2i.get(token, w2i['UNK']))
+        return query_vector
+
     def web(self):
-        pass
+        from flask import Flask
+        from flask import render_template
+        app = Flask("Person Search with Natural Language Description", static_folder='web', template_folder='web')
+        self.load_checkpoint('checkpoints', 'epoch_8.cpt')
+
+        @app.route('/')
+        def home():
+            return 'Person Search with Natural Language Description'
+
+        def search(query_vector, k=20):
+            top = []
+            caption = torch.Tensor(query_vector)
+            if self.conf.gpu_id != -1:
+                caption = caption.cuda()
+            n_database = len(self.test_db_loader.dataset)
+            out_matrix = np.zeros(n_database)
+            for images, indexes_q in self.test_db_loader:
+                if self.conf.gpu_id != -1:
+                    images = images.cuda()
+                if self.conf.amp:
+                    with autocast():
+                        images_feats_out = self.net(images)
+                else:
+                    images_feats_out = self.net(images)
+                captions = caption.repeat(len(images_feats_out), 1, 1)
+                if self.conf.amp:
+                    with autocast():
+                        out = self.net(images_feats_out, captions, query=True)
+                else:
+                    out = self.net(images_feats_out, captions, query=True)
+                out_matrix[indexes_q] = out.squeeze(1).cpu().detach().numpy()
+            out_matrix = torch.tensor(out_matrix)
+            _, top_k_indexes = out_matrix.topk(k, sorted=True)
+            for index in top_k_indexes:
+                data = self.test_db_loader.dataset.dataset[index]
+                path = data['file_path']
+                top.append(path)
+            return top
+
+        @app.route('/q')
+        @app.route('/q/<q>')
+        def query(q=None):
+            if q is None:
+                return render_template('web/query.html')
+            else:
+                result = {'q': q}
+                query_vector = self.query_transform(q)
+                result['vector'] = query_vector
+                top_20 = search(query_vector, k=20)
+                result['top'] = top_20
+                return render_template('web/result.html', result=result)
+
+        app.run(debug=self.conf.web_debug)
 
     def calculate_metrics(self, out_matrix, labels_matrix):
         sorted_indexes = out_matrix.argsort(dim=1)
@@ -307,8 +382,8 @@ class Model(object):
                 ret = labels[index_k]
                 if sum(ret) > 0:
                     n_corrects += 1
-            acc = n_corrects / len(labels_matrix) * 100.0
-            self.logger.info(f'top-{k} acc: {acc:.2f}')
+            acc = n_corrects / len(labels_matrix)
+            self.logger.info(f'top-{k} acc: {acc * 100.0:.2f}%')
             r.append(acc)
         return r
 
