@@ -5,6 +5,9 @@
     <title>Result</title>
 </head>
 <body>
-{{result}}
+<h3>{{result.q}}</h3>
+{% for path in result.top %}
+<li><img src="{{path}}" height="160px" width="80px"/></li>
+{% endfor %}
 </body>
 </html>

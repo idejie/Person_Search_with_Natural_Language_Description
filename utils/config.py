@@ -3,11 +3,11 @@ from loguru import logger
 
 class Config(object):
     def __init__(self):
-        self.action = 'train'  # process, train or test
+        self.action = 'web'  # process, train or test
         logger.add('logs/{time:YYYY-MM-DD_HH-mm-ss}.log')
         self.logger = logger
-        self.gpu_id = 1
-        self.num_workers = 5
+        self.gpu_id = 0
+        self.num_workers = 10
         self.vocab_dir = 'vocab'
         self.data_dir = 'data'
         self.raw_data = 'reid_raw.json'
@@ -23,15 +23,15 @@ class Config(object):
         self.checkpoints_dir = 'checkpoints'
         self.rnn_hidden_size = 512
         self.output_size = 512
-        self.batch_size = 100
+        self.batch_size = 32
         self.top_k = [1, 5, 10]
         self.image_size = (256, 256)
-        self.eval_interval = 200
+        self.eval_interval = 500
         self.test_interval = 1
         self.rnn_layers = 1
         self.rnn_dropout = 0.1
         self.backend = 'cudnn'  # nn|cudnn
         self.parallel = False
         self.web_debug = True
-        self.language_lr = 1e-3
-        self.cnn_lr = 1e-5
+        self.language_lr = 1e-6
+        self.cnn_lr = 1e-10

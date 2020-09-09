@@ -79,7 +79,6 @@ class Language_Subnet(nn.Module):
         # print('x_w_t', x_w_t.shape)
         x_v = x_v.repeat(x_w_t.size(1), 1, 1).transpose(0, 1)
         # print('x_v', x_v.shape)
-
         x_emb = torch.cat([x_w_t, x_v], dim=2)
 
         # print('x_emb', x_emb.shape)

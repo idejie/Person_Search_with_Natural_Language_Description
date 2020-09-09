@@ -14,7 +14,7 @@ from utils.config import Config
 from utils.preprocess import *
 
 config = Config()
-if config.action in ['train', 'test']:
+if config.action in ['train', 'test', 'web']:
     if config.amp:
         from torch.cuda.amp import autocast
     if config.parallel:
@@ -94,7 +94,7 @@ class Model(object):
 
             # init network
             self.net = GNA_RNN(conf)
-            self.net.to(self.device)
+            self.net.cuda()
             if conf.parallel:
                 self.net = torch.nn.parallel.DistributedDataParallel(self.net, device_ids=[local_rank],
                                                                      output_device=local_rank)
@@ -218,7 +218,7 @@ class Model(object):
                         desc='Test Stage')
         with torch.no_grad():
             # images: for d in db
-            for d, (images, indexes_d) in enumerate(self.test_db_loader):
+            for d, (images, indexes_d, d_ids) in enumerate(self.test_db_loader):
                 if self.conf.gpu_id != -1:
                     images = images.cuda()
                 if self.conf.amp:
@@ -227,12 +227,13 @@ class Model(object):
                 else:
                     images_feats_out = self.net(images)
                 # caption: for q in  query
-                for q, (captions, indexes_q) in enumerate(self.test_query_loader):
+                for q, (captions, indexes_q, q_ids) in enumerate(self.test_query_loader):
                     if self.conf.gpu_id != -1:
                         captions = captions.cuda()
-                    for image_out, index_d in zip(images_feats_out, indexes_d):
+                    for image_out, index_d, d_id in zip(images_feats_out, indexes_d, d_ids):
                         image_out_repeat = image_out.repeat(len(captions), 1)
                         index_d_repeat = index_d.repeat(len(captions), 1)
+                        d_id_repeat = d_id.repeat(len(captions), 1)
                         # print(image_out_repeat.shape,index_d_repeat.shape)
                         if self.conf.amp:
                             with autocast():
@@ -242,7 +243,7 @@ class Model(object):
                         test_bar.update(1)
                         outs = torch.sigmoid(outs)
                         out_matrix[indexes_q, index_d_repeat] = outs.squeeze(1).cpu().detach().numpy()
-                        labels = (index_d_repeat == indexes_q // 2) + 0
+                        labels = (d_id_repeat == q_ids) + 0
                         labels_matrix[indexes_q, index_d_repeat] = labels.numpy()
         out_matrix = torch.from_numpy(out_matrix)
         labels_matrix = torch.from_numpy(labels_matrix)
@@ -270,7 +271,7 @@ class Model(object):
                         desc='Eval Stage')
         with torch.no_grad():
             # images: for d in db
-            for d, (images, indexes_d) in enumerate(self.valid_db_loader):
+            for d, (images, indexes_d, d_ids) in enumerate(self.valid_db_loader):
                 if self.conf.gpu_id != -1:
                     images = images.cuda()
                 if self.conf.amp:
@@ -279,13 +280,14 @@ class Model(object):
                 else:
                     images_feats_out = self.net(images)
                 # caption: for q in  query
-                for q, (captions, indexes_q) in enumerate(self.valid_query_loader):
+                for q, (captions, indexes_q, q_ids) in enumerate(self.valid_query_loader):
                     if self.conf.gpu_id != -1:
                         captions = captions.cuda()
                     # repeat image for batch input
-                    for image_out, index_d in zip(images_feats_out, indexes_d):
+                    for image_out, index_d, d_id in zip(images_feats_out, indexes_d, d_ids):
                         image_out_repeat = image_out.repeat(len(captions), 1)
                         index_d_repeat = index_d.repeat(len(captions), 1)
+                        d_id_repeat = d_id.repeat(len(captions), 1)
                         if self.conf.amp:
                             with autocast():
                                 outs = self.net(image_out_repeat, captions, query=True)
@@ -293,8 +295,13 @@ class Model(object):
                             outs = self.net(image_out_repeat, captions, query=True)
                         eval_bar.update(1)
                         outs = torch.sigmoid(outs)
+                        if torch.isnan(outs).any():
+                            self.logger.error(outs)
+                            self.logger.error(captions)
+                            self.logger.error(image_out)
+                            self.logger.error(index_d, indexes_q)
                         out_matrix[indexes_q, index_d_repeat] = outs.squeeze(1).cpu().detach().numpy()
-                        labels = (index_d_repeat == indexes_q // 2) + 0
+                        labels = (d_id_repeat == q_ids) + 0
                         labels_matrix[indexes_q, index_d_repeat] = labels.numpy()
         eval_bar.close()
         out_matrix = torch.from_numpy(out_matrix)
@@ -308,6 +315,9 @@ class Model(object):
                 loss = self.criterion(out_matrix, labels_matrix)
         else:
             loss = self.criterion(out_matrix, labels_matrix)
+        if torch.isnan(loss).any():
+            self.logger.error(out_matrix)
+            self.logger.error(labels)
         self.logger.info(f'Eval average loss: {loss.item():.4f}')
         metrics = self.calculate_metrics(out_matrix, labels_matrix)
         return loss, metrics
@@ -321,40 +331,52 @@ class Model(object):
         query_vector = []
         for token in tokens:
             query_vector.append(w2i.get(token, w2i['UNK']))
-        return query_vector
+        caption = np.zeros(self.conf.max_length)
+        for i, cap_i in enumerate(query_vector):
+            if i < self.conf.max_length:
+                caption[i] = cap_i
+            else:
+                break
+        return caption
 
     def web(self):
-        from flask import Flask
+        from flask import Flask, request
         from flask import render_template
-        app = Flask("Person Search with Natural Language Description", static_folder='data/CUHK-PEDES/imgs',
-                    template_folder='web')
-        self.load_checkpoint('checkpoints', 'epoch_8.cpt')
+        app = Flask(__name__, template_folder='web', static_folder='data/CUHK-PEDES/imgs/', static_url_path='')
+
+        self.load_checkpoint('checkpoints', 'epoch_99.cpt')
+        self.net.eval()
 
         @app.route('/')
         def home():
-            return 'Person Search with Natural Language Description'
+            return render_template('index.html')
 
         def search(query_vector, k=20):
             top = []
-            caption = torch.Tensor(query_vector)
+            caption = torch.LongTensor(query_vector)
             if self.conf.gpu_id != -1:
                 caption = caption.cuda()
             n_database = len(self.test_db_loader.dataset)
             out_matrix = np.zeros(n_database)
-            for images, indexes_q in self.test_db_loader:
+            for images, indexes_q, _ in self.test_db_loader:
                 if self.conf.gpu_id != -1:
                     images = images.cuda()
                 if self.conf.amp:
                     with autocast():
-                        images_feats_out = self.net(images)
+                        with torch.no_grad():
+                            images_feats_out = self.net(images)
                 else:
-                    images_feats_out = self.net(images)
+                    with torch.no_grad():
+                        images_feats_out = self.net(images)
                 captions = caption.repeat(len(images_feats_out), 1, 1)
+                captions = captions.squeeze(1)
                 if self.conf.amp:
                     with autocast():
-                        out = self.net(images_feats_out, captions, query=True)
+                        with torch.no_grad():
+                            out = self.net(images_feats_out, captions, query=True)
                 else:
-                    out = self.net(images_feats_out, captions, query=True)
+                    with torch.no_grad():
+                        out = self.net(images_feats_out, captions, query=True)
                 out = torch.sigmoid(out)
                 out_matrix[indexes_q] = out.squeeze(1).cpu().detach().numpy()
             out_matrix = torch.tensor(out_matrix)
@@ -366,19 +388,23 @@ class Model(object):
             return top
 
         @app.route('/q')
-        @app.route('/q/<q>')
-        def query(q=None):
-            if q is None:
-                return render_template('web/query.html')
-            else:
+        def query_page():
+            return render_template('query.html')
+
+        @app.route('/query', methods=['get', 'post'])
+        def query():
+            if request.method == 'POST':
+                q = request.form['query']
                 result = {'q': q}
                 query_vector = self.query_transform(q)
                 result['vector'] = query_vector
                 top_20 = search(query_vector, k=20)
                 result['top'] = top_20
-                return render_template('web/result.html', result=result)
+                return render_template('result.html', result=result)
+            else:
+                return render_template('query.html')
 
-        app.run(debug=self.conf.web_debug)
+        app.run(debug=self.conf.web_debug, host='0.0.0.0', port=8888)
 
     def calculate_metrics(self, out_matrix, labels_matrix):
         sorted_indexes = out_matrix.argsort(dim=1)

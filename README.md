@@ -54,7 +54,8 @@
     - [x] Parallel
 - [ ] Web Visualization
     - [x] API
-    - [ ] Front End
+    - [x] Front End
+    - [ ] Prettify
 
 ## References
 - [[ShuangLI59/Person-Search-with-Natural-Language-Description]](https://github.com/ShuangLI59/Person-Search-with-Natural-Language-Description)

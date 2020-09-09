@@ -70,7 +70,7 @@ class CUHK_PEDES(Dataset):
                 label = 0
                 # sample a different image
                 neg_img_index = random.randint(0, len(self.dataset) - 1)
-                while neg_img_index == pos_img_index:
+                while self.dataset[neg_img_index]['id'] == pos_data['id']:
                     neg_img_index = random.randint(0, len(self.dataset) - 1)
                 neg_data = self.dataset[neg_img_index]
                 # sample a negative caption
@@ -99,14 +99,16 @@ class CUHK_PEDES(Dataset):
                     if i < self.config.max_length:
                         caption[i] = cap_i
                 caption = torch.LongTensor(caption)
-                return caption, index
+                p_id = int(data['id'])
+                return caption, index, p_id
             elif self.query_or_db == 'db':
                 data = self.dataset[index]
                 image_path = os.path.join(self.config.images_dir, data['file_path'])
                 image = Image.open(image_path)
                 # resize image to 256x256
                 image = self.transform(image)
-                return image, index
+                p_id = int(data['id'])
+                return image, index, p_id
 
     def __len__(self):
         """get the length of the dataset
